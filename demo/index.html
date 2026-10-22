@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Faultline — SDK Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --danger: #f43f5e;
+      --danger-hover: #e11d48;
+      --warning: #f59e0b;
+      --success: #10b981;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 2rem 1rem;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    header {
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      background-color: rgba(56, 189, 248, 0.1);
+      color: var(--primary);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--success);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .card h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .card p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    button {
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.65rem 1rem;
+      border-radius: 0.5rem;
+      border: none;
+      transition: all 0.15s ease-in-out;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn-danger {
+      background-color: var(--danger);
+      color: white;
+    }
+    .btn-danger:hover {
+      background-color: var(--danger-hover);
+    }
+
+    .btn-warning {
+      background-color: var(--warning);
+      color: #0f172a;
+    }
+    .btn-warning:hover {
+      filter: brightness(1.1);
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: #0f172a;
+    }
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .log-panel {
+      background: #020617;
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    #logOutput {
+      font-family: var(--font-mono);
+      font-size: 0.825rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+      max-height: 240px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .log-entry {
+      padding: 0.35rem 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .log-time {
+      color: #64748b;
+    }
+    .log-success {
+      color: #34d399;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Faultline Demo App</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+          Interactive sandbox to test the Faultline plain JavaScript SDK.
+        </p>
+      </div>
+      <div class="badge">
+        <span class="status-dot"></span>
+        Target: <span style="font-family: var(--font-mono)">http://localhost:4000/ingest</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- 1. Uncaught Runtime Error -->
+      <div class="card">
+        <div>
+          <h3>1. Uncaught Runtime Error</h3>
+          <p>Triggers a global <code>window.onerror</code> by accessing a property on undefined.</p>
+        </div>
+        <button class="btn-danger" onclick="triggerUncaughtError()">Trigger TypeError</button>
+      </div>
+
+      <!-- 2. Unhandled Promise Rejection -->
+      <div class="card">
+        <div>
+          <h3>2. Unhandled Rejection</h3>
+          <p>Triggers an async rejection caught automatically by <code>window.onunhandledrejection</code>.</p>
+        </div>
+        <button class="btn-danger" onclick="triggerUnhandledRejection()">Trigger Rejection</button>
+      </div>
+
+      <!-- 3. Manual Try / Catch Exception -->
+      <div class="card">
+        <div>
+          <h3>3. Manual Exception</h3>
+          <p>Catches a JSON parse failure and calls <code>Faultline.captureException(err)</code>.</p>
+        </div>
+        <button class="btn-warning" onclick="triggerManualException()">Capture Exception</button>
+      </div>
+
+      <!-- 4. Custom Fingerprinted Error -->
+      <div class="card">
+        <div>
+          <h3>4. Custom Fingerprint</h3>
+          <p>Dispatches an error with an explicit fingerprint override for custom grouping.</p>
+        </div>
+        <button class="btn-warning" onclick="triggerCustomFingerprint()">Capture with Fingerprint</button>
+      </div>
+
+      <!-- 5. Diagnostic Warning Message -->
+      <div class="card">
+        <div>
+          <h3>5. Diagnostic Message</h3>
+          <p>Captures an operational message using <code>Faultline.captureMessage(msg)</code>.</p>
+        </div>
+        <button class="btn-primary" onclick="triggerCaptureMessage()">Capture Message</button>
+      </div>
+    </div>
+
+    <!-- Live event feed -->
+    <div class="log-panel">
+      <div class="log-header">
+        <span>Activity Log</span>
+        <button style="background: transparent; color: var(--text-muted); border: 1px solid var(--card-border); padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="clearLogs()">Clear</button>
+      </div>
+      <div id="logOutput">Waiting for events... Click any button above to trigger an error.</div>
+    </div>
+  </div>
+
+  <!-- Load Configuration & Faultline SDK -->
+  <script src="/config.js"></script>
+  <script src="/sdk.js"></script>
+
+  <script>
+    // Initialize the Faultline SDK with the endpoint and authentication key
+    Faultline.init({
+      endpoint: 'http://localhost:4000/ingest',
+      apiKey: window.FAULTLINE_API_KEY,
+    });
+
+    function log(message, isSuccess = false) {
+      const output = document.getElementById('logOutput');
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<span class="log-time">[${time}]</span> ${isSuccess ? '<span class="log-success">' + message + '</span>' : message}`;
+      
+      if (output.innerText.startsWith('Waiting for events')) {
+        output.innerHTML = '';
+      }
+      output.appendChild(entry);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function clearLogs() {
+      document.getElementById('logOutput').innerText = 'Waiting for events... Click any button above to trigger an error.';
+    }
+
+    // 1. Uncaught error
+    function triggerUncaughtError() {
+      log('Triggering uncaught TypeError...');
+      setTimeout(() => {
+        // Will throw TypeError: Cannot read properties of undefined
+        window.nonExistentObject.someFunction();
+      }, 50);
+    }
+
+    // 2. Unhandled promise rejection
+    function triggerUnhandledRejection() {
+      log('Triggering unhandled Promise rejection...');
+      new Promise((_, reject) => {
+        reject(new Error('PaymentGateway: Failed to communicate with billing service'));
+      });
+    }
+
+    // 3. Manual try/catch capture
+    function triggerManualException() {
+      log('Executing try/catch block...');
+      try {
+        JSON.parse('{ invalid_json: 123 }');
+      } catch (err) {
+        log('Exception caught manually. Sending to Faultline.captureException()...');
+        Faultline.captureException(err);
+      }
+    }
+
+    // 4. Custom fingerprint
+    function triggerCustomFingerprint() {
+      log('Sending error with custom fingerprint "checkout-payment-failure"...');
+      const error = new Error('Transaction rejected by bank');
+      Faultline.captureException(error, {
+        fingerprint: 'checkout-payment-failure',
+      });
+    }
+
+    // 5. Diagnostic message
+    function triggerCaptureMessage() {
+      log('Sending warning message via Faultline.captureMessage()...');
+      Faultline.captureMessage('User attempted action on deprecated endpoint', {
+        type: 'Warning',
+      });
+    }
+  </script>
+</body>
+</html>

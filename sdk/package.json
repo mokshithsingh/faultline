@@ -1,0 +1,9 @@
+{
+  "name": "faultline-sdk",
+  "version": "1.0.0",
+  "description": "Plain JavaScript SDK for Faultline error tracking",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  }
+}

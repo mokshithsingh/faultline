@@ -1,0 +1,12 @@
+{
+  "name": "faultline-demo",
+  "version": "1.0.0",
+  "description": "Interactive demo web application showcasing the Faultline error tracking SDK",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.8"
+  }
+}
