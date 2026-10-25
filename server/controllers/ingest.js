@@ -59,22 +59,41 @@ async function ingestEvent(req, res) {
     await client.query('BEGIN');
 
     // Group errors by fingerprint. If already seen, increment count and reset status to UNRESOLVED (regression).
-    const issueUpsertQuery = `
-      INSERT INTO issues (fingerprint, type, message, status, events_count, first_seen, last_seen)
-      VALUES ($1, $2, $3, 'UNRESOLVED', 1, NOW(), NOW())
-      ON CONFLICT (fingerprint)
-      DO UPDATE SET
-        events_count = issues.events_count + 1,
-        last_seen = NOW(),
-        status = 'UNRESOLVED'
+    // UPDATE-first flow avoids advancing the issues.id sequence when the issue already exists.
+    const updateIssueQuery = `
+      UPDATE issues
+      SET events_count = events_count + 1,
+          last_seen = NOW(),
+          status = 'UNRESOLVED'
+      WHERE fingerprint = $1
       RETURNING id, events_count, status;
     `;
-    const issueResult = await client.query(issueUpsertQuery, [
-      issueFingerprint,
-      eventType,
-      eventMessage,
-    ]);
-    const issue = issueResult.rows[0];
+    let issueResult = await client.query(updateIssueQuery, [issueFingerprint]);
+    let issue;
+
+    if (issueResult.rowCount > 0) {
+      issue = issueResult.rows[0];
+    } else {
+      const insertIssueQuery = `
+        INSERT INTO issues (fingerprint, type, message, status, events_count, first_seen, last_seen)
+        VALUES ($1, $2, $3, 'UNRESOLVED', 1, NOW(), NOW())
+        ON CONFLICT (fingerprint) DO NOTHING
+        RETURNING id, events_count, status;
+      `;
+      issueResult = await client.query(insertIssueQuery, [
+        issueFingerprint,
+        eventType,
+        eventMessage,
+      ]);
+
+      if (issueResult.rowCount > 0) {
+        issue = issueResult.rows[0];
+      } else {
+        // If concurrent insert created the issue first, run the UPDATE once more
+        issueResult = await client.query(updateIssueQuery, [issueFingerprint]);
+        issue = issueResult.rows[0];
+      }
+    }
 
     const eventInsertQuery = `
       INSERT INTO events (issue_id, type, message, stack, timestamp, received_at)

@@ -23,9 +23,15 @@ async function getStats(req, res) {
 
 /**
  * Controller for listing issues with optional status filtering.
+ * Limits results to the 100 most recently seen issues.
  */
 async function getIssues(req, res) {
   const { status } = req.query;
+
+  // Validate status if present
+  if (status !== undefined && status !== 'UNRESOLVED' && status !== 'RESOLVED') {
+    return res.status(400).json({ error: 'status must be UNRESOLVED or RESOLVED' });
+  }
 
   try {
     let queryText = `
@@ -34,12 +40,12 @@ async function getIssues(req, res) {
     `;
     const queryParams = [];
 
-    if (status && (status === 'UNRESOLVED' || status === 'RESOLVED')) {
+    if (status) {
       queryParams.push(status);
       queryText += ` WHERE status = $1`;
     }
 
-    queryText += ` ORDER BY last_seen DESC;`;
+    queryText += ` ORDER BY last_seen DESC LIMIT 100;`;
 
     const result = await pool.query(queryText, queryParams);
     return res.status(200).json(result.rows);
@@ -50,12 +56,22 @@ async function getIssues(req, res) {
 }
 
 /**
- * Controller for retrieving a single issue and all its historical event occurrences.
+ * Controller for retrieving a single issue and historical event occurrences.
+ * Supports an optional clamped limit (1 to 200, default 50).
  */
 async function getIssueById(req, res) {
   const issueId = parseInt(req.params.id, 10);
   if (isNaN(issueId)) {
     return res.status(400).json({ error: 'Invalid issue ID' });
+  }
+
+  // Parse and clamp event limit between 1 and 200 (default 50)
+  let limit = 50;
+  if (req.query.limit !== undefined) {
+    const parsedLimit = parseInt(req.query.limit, 10);
+    if (!isNaN(parsedLimit)) {
+      limit = Math.min(Math.max(parsedLimit, 1), 200);
+    }
   }
 
   try {
@@ -65,8 +81,8 @@ async function getIssueById(req, res) {
     }
 
     const eventsResult = await pool.query(
-      'SELECT id, type, message, stack, timestamp, received_at FROM events WHERE issue_id = $1 ORDER BY received_at DESC',
-      [issueId]
+      'SELECT id, type, message, stack, timestamp, received_at FROM events WHERE issue_id = $1 ORDER BY received_at DESC LIMIT $2',
+      [issueId, limit]
     );
 
     return res.status(200).json({
@@ -111,31 +127,9 @@ async function updateIssueStatus(req, res) {
   }
 }
 
-/**
- * Controller for deleting an issue and cascading deletion to its child events.
- */
-async function deleteIssue(req, res) {
-  const issueId = parseInt(req.params.id, 10);
-  if (isNaN(issueId)) {
-    return res.status(400).json({ error: 'Invalid issue ID' });
-  }
-
-  try {
-    const result = await pool.query('DELETE FROM issues WHERE id = $1 RETURNING id', [issueId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Issue not found' });
-    }
-    return res.status(200).json({ success: true, deletedId: issueId });
-  } catch (error) {
-    console.error('Error deleting issue:', error);
-    return res.status(500).json({ error: 'Failed to delete issue.' });
-  }
-}
-
 module.exports = {
   getStats,
   getIssues,
   getIssueById,
   updateIssueStatus,
-  deleteIssue,
 };
