@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = ''; // Uses Vite proxy to localhost:4000 in dev
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export default function App() {
   const [issues, setIssues] = useState([]);
