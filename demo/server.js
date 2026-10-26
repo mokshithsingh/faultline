@@ -7,7 +7,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const PORT = process.env.DEMO_PORT || 5000;
+const PORT = process.env.PORT;
 
 const server = http.createServer((req, res) => {
   // Expose API key securely to the local demo UI without hardcoding in HTML
