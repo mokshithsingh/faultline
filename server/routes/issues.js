@@ -1,16 +1,17 @@
 const express = require('express');
 const {
-  getStats,
-  getIssues,
-  getIssueById,
-  updateIssueStatus,
+  getProjectIssues,
+  getProjectIssueById,
+  updateProjectIssueStatus,
+  deleteProjectIssue,
 } = require('../controllers/issues');
 
-const router = express.Router();
+const router = express.Router({ mergeParams: true });
 
-router.get('/stats', getStats);
-router.get('/', getIssues);
-router.get('/:id', getIssueById);
-router.patch('/:id', updateIssueStatus);
+// Routes scoped under /api/projects/:projectId/issues
+router.get('/', getProjectIssues);
+router.get('/:issueId', getProjectIssueById);
+router.patch('/:issueId', updateProjectIssueStatus);
+router.delete('/:issueId', deleteProjectIssue);
 
 module.exports = router;

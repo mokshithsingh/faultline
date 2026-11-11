@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS projects (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL CHECK (char_length(name) >= 1 AND char_length(name) <= 100),
-    api_key VARCHAR(64) NOT NULL UNIQUE CHECK (char_length(api_key) = 64),
+    api_key_hash VARCHAR(64) NOT NULL UNIQUE CHECK (char_length(api_key_hash) = 64),
+    key_prefix VARCHAR(12) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_event_at TIMESTAMPTZ
 );

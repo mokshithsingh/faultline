@@ -1,10 +1,10 @@
 const express = require('express');
-const { validateApiKey } = require('../middleware/auth');
+const { validateProjectApiKey } = require('../middleware/auth');
 const { ingestEvent } = require('../controllers/ingest');
 
 const router = express.Router();
 
-// POST /ingest -> Validates API key in middleware, then handles ingestion in controller
-router.post('/', validateApiKey, ingestEvent);
+// POST /v1/ingest -> Authenticates project by hashed API key, then ingests event
+router.post('/', validateProjectApiKey, ingestEvent);
 
 module.exports = router;

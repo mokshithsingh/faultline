@@ -2,18 +2,29 @@ const path = require('path');
 const dotenv = require('dotenv');
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const { pool } = require('./db');
+const authRouter = require('./routes/auth');
+const projectsRouter = require('./routes/projects');
 const ingestRouter = require('./routes/ingest');
-const issuesRouter = require('./routes/issues');
 
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+// Enforce JWT_SECRET requirement at startup; crash immediately if missing (no fallback default)
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is missing.');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
-app.use(express.json());
+// Trust proxy for express-rate-limit and reverse proxy setups
+app.set('trust proxy', 1);
+
+app.use(cookieParser());
+app.use(express.json({ limit: '100kb' }));
 
 app.get('/health', async (req, res) => {
   try {
@@ -25,8 +36,12 @@ app.get('/health', async (req, res) => {
   }
 });
 
-app.use('/ingest', ingestRouter);
-app.use('/issues', issuesRouter);
+// CORS open to any origin ONLY on /v1/ingest; /api routes are same-origin and need no CORS
+app.use('/v1/ingest', cors(), ingestRouter);
+
+// Project and auth routes
+app.use('/api/auth', authRouter);
+app.use('/api/projects', projectsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

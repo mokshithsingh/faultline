@@ -1,71 +1,167 @@
 const { pool } = require('../db');
 
 /**
- * Controller for retrieving aggregate metrics (total, unresolved, resolved, occurrences).
+ * Verify if the project belongs to the authenticated user.
  */
-async function getStats(req, res) {
+async function verifyProjectOwnership(projectId, userId) {
+  const result = await pool.query(
+    'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
+    [projectId, userId]
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * Controller for retrieving aggregate metrics scoped to a specific project.
+ * Returns 404 if the project is not owned by the user.
+ */
+async function getProjectStats(req, res) {
+  const projectId = parseInt(req.params.projectId, 10);
+  if (isNaN(projectId)) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
   try {
+    const isOwner = await verifyProjectOwnership(projectId, req.user.id);
+    if (!isOwner) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
     const statsQuery = `
       SELECT
         COUNT(*)::int AS total_issues,
-        COUNT(*) FILTER (WHERE status = 'UNRESOLVED')::int AS unresolved_issues,
-        COUNT(*) FILTER (WHERE status = 'RESOLVED')::int AS resolved_issues,
-        COALESCE(SUM(events_count), 0)::int AS total_events
-      FROM issues;
+        COUNT(*) FILTER (WHERE i.status = 'UNRESOLVED')::int AS unresolved_issues,
+        COUNT(*) FILTER (WHERE i.status = 'RESOLVED')::int AS resolved_issues,
+        COALESCE(SUM(i.events_count), 0)::int AS total_events
+      FROM issues i
+      JOIN projects p ON p.id = i.project_id
+      WHERE i.project_id = $1 AND p.user_id = $2;
     `;
-    const result = await pool.query(statsQuery);
+    const result = await pool.query(statsQuery, [projectId, req.user.id]);
     return res.status(200).json(result.rows[0]);
   } catch (error) {
-    console.error('Error fetching issue stats:', error);
-    return res.status(500).json({ error: 'Failed to fetch issue statistics.' });
+    console.error('Error fetching project issue stats:', error);
+    return res.status(500).json({ error: 'Failed to fetch project issue statistics.' });
   }
 }
 
 /**
- * Controller for listing issues with optional status filtering.
- * Limits results to the 100 most recently seen issues.
+ * Controller for listing issues within a project.
+ * Supports filters: status (UNRESOLVED/RESOLVED), search (type/message), and pagination (page, limit).
+ * Returns 404 if the project is not owned by the user.
  */
-async function getIssues(req, res) {
-  const { status } = req.query;
+async function getProjectIssues(req, res) {
+  const projectId = parseInt(req.params.projectId, 10);
+  if (isNaN(projectId)) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
 
-  // Validate status if present
+  const { status, search } = req.query;
+
+  // Validate status filter if provided
   if (status !== undefined && status !== 'UNRESOLVED' && status !== 'RESOLVED') {
     return res.status(400).json({ error: 'status must be UNRESOLVED or RESOLVED' });
   }
 
+  // Parse pagination parameters
+  let page = parseInt(req.query.page, 10);
+  if (isNaN(page) || page < 1) {
+    page = 1;
+  }
+
+  let limit = parseInt(req.query.limit, 10);
+  if (isNaN(limit) || limit < 1) {
+    limit = 20;
+  } else if (limit > 100) {
+    limit = 100;
+  }
+
+  const offset = (page - 1) * limit;
+
   try {
-    let queryText = `
-      SELECT id, fingerprint, type, message, status, events_count, first_seen, last_seen
-      FROM issues
-    `;
-    const queryParams = [];
+    const isOwner = await verifyProjectOwnership(projectId, req.user.id);
+    if (!isOwner) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const conditions = ['i.project_id = $1', 'p.user_id = $2'];
+    const queryParams = [projectId, req.user.id];
 
     if (status) {
       queryParams.push(status);
-      queryText += ` WHERE status = $1`;
+      conditions.push(`i.status = $${queryParams.length}`);
     }
 
-    queryText += ` ORDER BY last_seen DESC LIMIT 100;`;
+    if (search && typeof search === 'string' && search.trim() !== '') {
+      queryParams.push(`%${search.trim()}%`);
+      const searchParamIndex = queryParams.length;
+      conditions.push(`(i.type ILIKE $${searchParamIndex} OR i.message ILIKE $${searchParamIndex})`);
+    }
 
-    const result = await pool.query(queryText, queryParams);
-    return res.status(200).json(result.rows);
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    // Total count query for pagination
+    const countQuery = `
+      SELECT COUNT(i.id)::int AS total
+      FROM issues i
+      JOIN projects p ON p.id = i.project_id
+      ${whereClause};
+    `;
+    const countResult = await pool.query(countQuery, queryParams);
+    const total = countResult.rows[0].total;
+
+    // Items query with pagination
+    queryParams.push(limit);
+    const limitParamIndex = queryParams.length;
+    queryParams.push(offset);
+    const offsetParamIndex = queryParams.length;
+
+    const dataQuery = `
+      SELECT
+        i.id,
+        i.project_id,
+        i.fingerprint,
+        i.type,
+        i.message,
+        i.status,
+        i.events_count,
+        i.first_seen,
+        i.last_seen
+      FROM issues i
+      JOIN projects p ON p.id = i.project_id
+      ${whereClause}
+      ORDER BY i.last_seen DESC
+      LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex};
+    `;
+    const result = await pool.query(dataQuery, queryParams);
+
+    return res.status(200).json({
+      issues: result.rows,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    });
   } catch (error) {
-    console.error('Error fetching issues:', error);
-    return res.status(500).json({ error: 'Failed to fetch issues.' });
+    console.error('Error fetching project issues:', error);
+    return res.status(500).json({ error: 'Failed to fetch project issues.' });
   }
 }
 
 /**
  * Controller for retrieving a single issue and historical event occurrences.
- * Supports an optional clamped limit (1 to 200, default 50).
+ * Scoped to user's project; returns 404 if not found or not owned.
  */
-async function getIssueById(req, res) {
-  const issueId = parseInt(req.params.id, 10);
-  if (isNaN(issueId)) {
-    return res.status(400).json({ error: 'Invalid issue ID' });
+async function getProjectIssueById(req, res) {
+  const projectId = parseInt(req.params.projectId, 10);
+  const issueId = parseInt(req.params.issueId, 10);
+
+  if (isNaN(projectId) || isNaN(issueId)) {
+    return res.status(404).json({ error: 'Issue not found' });
   }
 
-  // Parse and clamp event limit between 1 and 200 (default 50)
   let limit = 50;
   if (req.query.limit !== undefined) {
     const parsedLimit = parseInt(req.query.limit, 10);
@@ -75,15 +171,35 @@ async function getIssueById(req, res) {
   }
 
   try {
-    const issueResult = await pool.query('SELECT * FROM issues WHERE id = $1', [issueId]);
+    const issueQuery = `
+      SELECT
+        i.id,
+        i.project_id,
+        i.fingerprint,
+        i.type,
+        i.message,
+        i.status,
+        i.events_count,
+        i.first_seen,
+        i.last_seen
+      FROM issues i
+      JOIN projects p ON p.id = i.project_id
+      WHERE i.id = $1 AND i.project_id = $2 AND p.user_id = $3;
+    `;
+    const issueResult = await pool.query(issueQuery, [issueId, projectId, req.user.id]);
+
     if (issueResult.rows.length === 0) {
       return res.status(404).json({ error: 'Issue not found' });
     }
 
-    const eventsResult = await pool.query(
-      'SELECT id, type, message, stack, timestamp, received_at FROM events WHERE issue_id = $1 ORDER BY received_at DESC LIMIT $2',
-      [issueId, limit]
-    );
+    const eventsQuery = `
+      SELECT id, project_id, issue_id, type, message, stack, timestamp, received_at
+      FROM events
+      WHERE issue_id = $1 AND project_id = $2
+      ORDER BY received_at DESC
+      LIMIT $3;
+    `;
+    const eventsResult = await pool.query(eventsQuery, [issueId, projectId, limit]);
 
     return res.status(200).json({
       issue: issueResult.rows[0],
@@ -97,13 +213,15 @@ async function getIssueById(req, res) {
 
 /**
  * Controller for updating an issue status ('RESOLVED' or 'UNRESOLVED').
+ * Scoped to user's project; returns 404 if not found or not owned.
  */
-async function updateIssueStatus(req, res) {
-  const issueId = parseInt(req.params.id, 10);
+async function updateProjectIssueStatus(req, res) {
+  const projectId = parseInt(req.params.projectId, 10);
+  const issueId = parseInt(req.params.issueId, 10);
   const { status } = req.body || {};
 
-  if (isNaN(issueId)) {
-    return res.status(400).json({ error: 'Invalid issue ID' });
+  if (isNaN(projectId) || isNaN(issueId)) {
+    return res.status(404).json({ error: 'Issue not found' });
   }
 
   if (status !== 'RESOLVED' && status !== 'UNRESOLVED') {
@@ -111,25 +229,78 @@ async function updateIssueStatus(req, res) {
   }
 
   try {
-    const updateResult = await pool.query(
-      'UPDATE issues SET status = $1 WHERE id = $2 RETURNING *',
-      [status, issueId]
-    );
+    const updateQuery = `
+      UPDATE issues i
+      SET status = $1
+      FROM projects p
+      WHERE i.project_id = p.id
+        AND i.id = $2
+        AND i.project_id = $3
+        AND p.user_id = $4
+      RETURNING
+        i.id,
+        i.project_id,
+        i.fingerprint,
+        i.type,
+        i.message,
+        i.status,
+        i.events_count,
+        i.first_seen,
+        i.last_seen;
+    `;
+    const result = await pool.query(updateQuery, [status, issueId, projectId, req.user.id]);
 
-    if (updateResult.rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Issue not found' });
     }
 
-    return res.status(200).json(updateResult.rows[0]);
+    return res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error('Error updating issue status:', error);
     return res.status(500).json({ error: 'Failed to update issue.' });
   }
 }
 
+/**
+ * Controller for deleting an issue.
+ * Cascades to delete related events via foreign key.
+ * Scoped to user's project; returns 404 if not found or not owned.
+ */
+async function deleteProjectIssue(req, res) {
+  const projectId = parseInt(req.params.projectId, 10);
+  const issueId = parseInt(req.params.issueId, 10);
+
+  if (isNaN(projectId) || isNaN(issueId)) {
+    return res.status(404).json({ error: 'Issue not found' });
+  }
+
+  try {
+    const deleteQuery = `
+      DELETE FROM issues i
+      USING projects p
+      WHERE i.project_id = p.id
+        AND i.id = $1
+        AND i.project_id = $2
+        AND p.user_id = $3
+      RETURNING i.id;
+    `;
+    const result = await pool.query(deleteQuery, [issueId, projectId, req.user.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Issue deleted' });
+  } catch (error) {
+    console.error('Error deleting issue:', error);
+    return res.status(500).json({ error: 'Failed to delete issue.' });
+  }
+}
+
 module.exports = {
-  getStats,
-  getIssues,
-  getIssueById,
-  updateIssueStatus,
+  getProjectStats,
+  getProjectIssues,
+  getProjectIssueById,
+  updateProjectIssueStatus,
+  deleteProjectIssue,
 };
