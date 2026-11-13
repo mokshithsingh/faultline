@@ -1,0 +1,46 @@
+name: faultline
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: faultline
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: faultline
+    volumes:
+      - pgdata:/var/lib/postgresql
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U faultline -d faultline"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      DB_URL: postgres://faultline:${DB_PASSWORD}@db:5432/faultline
+      PORT: 4000
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 384m
+    cpus: 1.0
+
+  web:
+    build: ./dashboard
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4200:80"
+    depends_on:
+      - api
+    mem_limit: 128m
+    cpus: 0.5
+
+volumes:
+  pgdata:

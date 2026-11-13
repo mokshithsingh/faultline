@@ -1,546 +1,487 @@
-import React, { useState, useEffect, useCallback } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { api } from './api';
+import Navbar from './components/Navbar';
+import AuthView from './components/AuthView';
+import HomeScreen from './components/HomeScreen';
+import StatsCards from './components/StatsCards';
+import IssuesList from './components/IssuesList';
+import IssueDetail from './components/IssueDetail';
+import ProjectModal from './components/ProjectModal';
+import ProjectSettingsModal from './components/ProjectSettingsModal';
+import SdkSnippetModal from './components/SdkSnippetModal';
+import { ToastContainer } from './components/Toast';
+import { IconBolt, IconPlus, IconTerminal } from './components/Icons';
 
 export default function App() {
-  const [issues, setIssues] = useState([]);
+  // Session & User State
+  const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  // Projects State
+  const [projects, setProjects] = useState([]);
+  const [activeProject, setActiveProject] = useState(null);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+
+  // Issues & Metrics State
   const [stats, setStats] = useState({
     total_issues: 0,
     unresolved_issues: 0,
     resolved_issues: 0,
     total_events: 0,
   });
-  const [selectedIssueId, setSelectedIssueId] = useState(null);
-  const [issueDetail, setIssueDetail] = useState(null);
+  const [issues, setIssues] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [selectedIssueId, setSelectedIssueId] = useState(null);
+  const [issueDetail, setIssueDetail] = useState(null);
+
+  // Loading & Polling State
+  const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  // Fetch issue list and aggregate stats
-  const fetchData = useCallback(async () => {
-    try {
-      const statusParam = filterStatus !== 'ALL' ? `?status=${filterStatus}` : '';
-      const [issuesRes, statsRes] = await Promise.all([
-        fetch(`${API_BASE}/issues${statusParam}`),
-        fetch(`${API_BASE}/issues/stats`),
-      ]);
+  // Navigation & View State
+  const [currentView, setCurrentView] = useState('home'); // 'home' | 'auth' | 'dashboard'
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
 
-      if (issuesRes.ok && statsRes.ok) {
-        const issuesData = await issuesRes.json();
-        const statsData = await statsRes.json();
-        setIssues(issuesData);
-        setStats(statsData);
+  // Modals & Toasts State
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showSdkModal, setShowSdkModal] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  // Toast notification helper
+  const showToast = useCallback((message, type = 'info') => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  }, []);
+
+  const dismissToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // 1. Initial Session Check
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const data = await api.getMe();
+        if (data?.user) {
+          setUser(data.user);
+        }
+      } catch (err) {
+        // Not authenticated
+        setUser(null);
+      } finally {
+        setAuthChecking(false);
       }
-    } catch (err) {
-      console.error('Failed to load dashboard data:', err);
-    } finally {
-      setLoading(false);
     }
-  }, [filterStatus]);
+    checkAuth();
+  }, []);
 
-  // Fetch details and event history for a selected issue
-  const fetchIssueDetail = useCallback(async (id) => {
-    setDetailLoading(true);
+  // 2. Fetch Projects when user is authenticated
+  const fetchProjects = useCallback(async (selectId = null) => {
+    setProjectsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/issues/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setIssueDetail(data);
+      const data = await api.getProjects();
+      setProjects(data || []);
+
+      if (data && data.length > 0) {
+        if (selectId) {
+          const found = data.find((p) => p.id === selectId);
+          setActiveProject(found || data[0]);
+        } else {
+          setActiveProject((prev) => {
+            if (prev) {
+              const updated = data.find((p) => p.id === prev.id);
+              return updated || data[0];
+            }
+            return data[0];
+          });
+        }
+      } else {
+        setActiveProject(null);
       }
     } catch (err) {
-      console.error('Failed to fetch issue details:', err);
+      console.error('Failed to load projects:', err);
     } finally {
-      setDetailLoading(false);
+      setProjectsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (user) {
+      fetchProjects();
+    } else {
+      setProjects([]);
+      setActiveProject(null);
+      setIssues([]);
+    }
+  }, [user, fetchProjects]);
 
-  // Polling: Auto-refresh data every 5 seconds if enabled
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const interval = setInterval(() => {
-      fetchData();
-      if (selectedIssueId) {
-        fetchIssueDetail(selectedIssueId);
+  // 3. Fetch Scoped Metrics and Issues for Active Project
+  const fetchProjectData = useCallback(async (silent = false) => {
+    if (!activeProject) return;
+    if (!silent) setLoading(true);
+
+    try {
+      const [statsData, issuesData] = await Promise.all([
+        api.getProjectStats(activeProject.id),
+        api.getProjectIssues(activeProject.id, {
+          status: filterStatus,
+          search: searchQuery,
+          page,
+          limit: 20,
+        }),
+      ]);
+
+      if (statsData) setStats(statsData);
+      if (issuesData) {
+        setIssues(issuesData.issues || []);
+        if (issuesData.pagination) setPagination(issuesData.pagination);
       }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [autoRefresh, fetchData, fetchIssueDetail, selectedIssueId]);
+    } catch (err) {
+      console.error('Failed to load project issues:', err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [activeProject, filterStatus, searchQuery, page]);
 
-  // Handle clicking an issue row
+  useEffect(() => {
+    if (activeProject) {
+      fetchProjectData();
+    }
+  }, [activeProject, fetchProjectData]);
+
+  // 4. Fetch Issue Detail
+  const fetchIssueDetail = useCallback(async (issueId, silent = false) => {
+    if (!activeProject || !issueId) return;
+    if (!silent) setDetailLoading(true);
+
+    try {
+      const data = await api.getProjectIssueById(activeProject.id, issueId);
+      setIssueDetail(data);
+    } catch (err) {
+      console.error('Failed to load issue detail:', err);
+      showToast('Could not load issue details.', 'error');
+    } finally {
+      if (!silent) setDetailLoading(false);
+    }
+  }, [activeProject, showToast]);
+
+  // Handle clicking on an issue
   const handleSelectIssue = (id) => {
     setSelectedIssueId(id);
     fetchIssueDetail(id);
   };
 
-  // Toggle issue resolution status (UNRESOLVED <-> RESOLVED)
-  const handleToggleStatus = async (e, issueId, currentStatus) => {
-    e.stopPropagation();
+  // 5. Polling: Auto-refresh data every 1 second if enabled
+  useEffect(() => {
+    if (!autoRefresh || !activeProject) return;
+    let isFetching = false;
+    const interval = setInterval(async () => {
+      if (isFetching) return;
+      isFetching = true;
+      try {
+        await Promise.all([
+          fetchProjectData(true),
+          selectedIssueId ? fetchIssueDetail(selectedIssueId, true) : Promise.resolve(),
+        ]);
+      } finally {
+        isFetching = false;
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, activeProject, fetchProjectData, fetchIssueDetail, selectedIssueId]);
+
+  // Manual Refresh Handler
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchProjects(),
+      fetchProjectData(true),
+      selectedIssueId ? fetchIssueDetail(selectedIssueId, true) : Promise.resolve(),
+    ]);
+    setTimeout(() => setRefreshing(false), 400);
+  };
+
+  // Issue Actions: Toggle Resolution Status
+  const handleToggleStatus = async (issueId, currentStatus) => {
+    if (!activeProject) return;
     const newStatus = currentStatus === 'RESOLVED' ? 'UNRESOLVED' : 'RESOLVED';
+
     try {
-      const res = await fetch(`${API_BASE}/issues/${issueId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) {
-        fetchData();
-        if (selectedIssueId === issueId) {
-          fetchIssueDetail(issueId);
-        }
+      await api.updateProjectIssueStatus(activeProject.id, issueId, newStatus);
+      showToast(
+        newStatus === 'RESOLVED' ? 'Issue marked as resolved.' : 'Issue reopened.',
+        'success'
+      );
+      fetchProjectData(true);
+      if (selectedIssueId === issueId) {
+        fetchIssueDetail(issueId, true);
       }
     } catch (err) {
-      console.error('Failed to update issue status:', err);
+      showToast(err.message || 'Failed to update issue status.', 'error');
     }
   };
 
-  // Filter issues by client search query (type or message)
-  const filteredIssues = issues.filter((issue) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      issue.type.toLowerCase().includes(q) ||
-      issue.message.toLowerCase().includes(q) ||
-      issue.fingerprint.toLowerCase().includes(q)
-    );
-  });
+  // Issue Actions: Delete Issue
+  const handleDeleteIssue = async (issueId) => {
+    if (!activeProject) return;
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '—';
-    const d = new Date(dateString);
-    return d.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    try {
+      await api.deleteProjectIssue(activeProject.id, issueId);
+      showToast('Issue deleted.', 'success');
+      if (selectedIssueId === issueId) {
+        setSelectedIssueId(null);
+        setIssueDetail(null);
+      }
+      fetchProjectData(true);
+    } catch (err) {
+      showToast(err.message || 'Failed to delete issue.', 'error');
+    }
   };
 
-  return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem 1rem' }}>
-      {/* Top Navigation Bar */}
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '1rem',
-          paddingBottom: '1.5rem',
-          borderBottom: '1px solid var(--border)',
-          marginBottom: '1.5rem',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+  // Logout Handler
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+      setUser(null);
+      setCurrentView('home');
+      showToast('Logged out successfully.', 'info');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  // Loading spinner during initial session check
+  if (authChecking) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
           <div
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #38bdf8 0%, #0369a1 100%)',
-              display: 'flex',
+              width: '40px',
+              height: '40px',
+              borderRadius: 'var(--radius-md)',
+              background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
+              color: '#ffffff',
+              display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontWeight: 800,
-              color: '#090d16',
-              fontSize: '1.2rem',
+              marginBottom: '1rem',
+              animation: 'spin 1.5s linear infinite',
             }}
           >
-            ⚡
+            <IconBolt size={22} color="#ffffff" />
           </div>
-          <div>
-            <h1 style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-              Faultline
-            </h1>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-              Developer Error Tracker
-            </span>
+          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Loading Faultline...
           </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              fontSize: '0.825rem',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            Live polling (5s)
-          </label>
-          <button
-            onClick={() => {
-              fetchData();
-              if (selectedIssueId) fetchIssueDetail(selectedIssueId);
-            }}
-            style={{
-              background: 'var(--card)',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
-              padding: '0.45rem 0.85rem',
-              borderRadius: '6px',
-              fontSize: '0.85rem',
-              fontWeight: 500,
-            }}
-          >
-            Refresh
-          </button>
-        </div>
-      </header>
-
-      {/* Stats Cards */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '1rem',
-          marginBottom: '1.5rem',
-        }}
-      >
-        <div style={statCardStyle}>
-          <span style={statLabelStyle}>Total Issues</span>
-          <span style={statValueStyle}>{stats.total_issues}</span>
-        </div>
-        <div style={statCardStyle}>
-          <span style={statLabelStyle}>Unresolved</span>
-          <span style={{ ...statValueStyle, color: 'var(--danger)' }}>
-            {stats.unresolved_issues}
-          </span>
-        </div>
-        <div style={statCardStyle}>
-          <span style={statLabelStyle}>Resolved</span>
-          <span style={{ ...statValueStyle, color: 'var(--success)' }}>
-            {stats.resolved_issues}
-          </span>
-        </div>
-        <div style={statCardStyle}>
-          <span style={statLabelStyle}>Total Occurrences</span>
-          <span style={{ ...statValueStyle, color: 'var(--primary)' }}>
-            {stats.total_events}
-          </span>
         </div>
       </div>
+    );
+  }
 
-      {/* Main Content: Either Detail View or Issues List */}
-      {selectedIssueId && issueDetail ? (
-        /* Issue Detail View */
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', padding: '1.5rem' }}>
-          {/* Back button & Actions bar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <button
-              onClick={() => setSelectedIssueId(null)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                color: 'var(--primary)',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-              }}
-            >
-              ← Back to issues
-            </button>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button
-                onClick={(e) => handleToggleStatus(e, issueDetail.issue.id, issueDetail.issue.status)}
-                style={{
-                  background: issueDetail.issue.status === 'RESOLVED' ? 'var(--card)' : 'var(--success)',
-                  color: issueDetail.issue.status === 'RESOLVED' ? 'var(--text)' : '#090d16',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                }}
-              >
-                {issueDetail.issue.status === 'RESOLVED' ? 'Reopen Issue' : 'Mark as Resolved'}
-              </button>
-            </div>
-          </div>
+  // 1. Home View
+  if (currentView === 'home') {
+    return (
+      <>
+        <HomeScreen
+          user={user}
+          onGoToDashboard={() => {
+            if (user) {
+              setCurrentView('dashboard');
+            } else {
+              setAuthMode('login');
+              setCurrentView('auth');
+            }
+          }}
+          onOpenAuth={(mode) => {
+            setAuthMode(mode || 'login');
+            setCurrentView('auth');
+          }}
+          onLogout={handleLogout}
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
 
-          {/* Issue Header */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-              <span style={typeBadgeStyle}>{issueDetail.issue.type}</span>
-              <span
-                style={{
-                  padding: '0.2rem 0.6rem',
-                  borderRadius: '4px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  background: issueDetail.issue.status === 'RESOLVED' ? 'var(--success-bg)' : 'var(--danger-bg)',
-                  color: issueDetail.issue.status === 'RESOLVED' ? 'var(--success)' : 'var(--danger)',
-                }}
-              >
-                {issueDetail.issue.status}
-              </span>
-            </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, lineHeight: 1.4 }}>
-              {issueDetail.issue.message}
-            </h2>
-          </div>
+  // 2. Auth View
+  if (currentView === 'auth' || !user) {
+    return (
+      <>
+        <AuthView
+          initialMode={authMode}
+          onAuthSuccess={(usr) => {
+            setUser(usr);
+            setCurrentView('dashboard');
+          }}
+          onShowToast={showToast}
+          onBackToHome={() => setCurrentView('home')}
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
 
-          {/* Issue Metadata Pills */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', padding: '1rem', background: 'var(--card)', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.85rem' }}>
-            <div>
-              <span style={{ color: 'var(--text-dim)', display: 'block' }}>Fingerprint</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {issueDetail.issue.fingerprint}
-              </span>
-            </div>
-            <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '1rem' }}>
-              <span style={{ color: 'var(--text-dim)', display: 'block' }}>Occurrences</span>
-              <span style={{ fontWeight: 600 }}>{issueDetail.issue.events_count}</span>
-            </div>
-            <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '1rem' }}>
-              <span style={{ color: 'var(--text-dim)', display: 'block' }}>First Seen</span>
-              <span>{formatDate(issueDetail.issue.first_seen)}</span>
-            </div>
-            <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '1rem' }}>
-              <span style={{ color: 'var(--text-dim)', display: 'block' }}>Last Seen</span>
-              <span>{formatDate(issueDetail.issue.last_seen)}</span>
-            </div>
-          </div>
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Top Navbar */}
+      <Navbar
+        user={user}
+        projects={projects}
+        activeProject={activeProject}
+        onSelectProject={(proj) => {
+          setActiveProject(proj);
+          setSelectedIssueId(null);
+          setIssueDetail(null);
+          setPage(1);
+        }}
+        onOpenNewProject={() => setShowProjectModal(true)}
+        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenSdk={() => setShowSdkModal(true)}
+        autoRefresh={autoRefresh}
+        onToggleAutoRefresh={(enabled) => setAutoRefresh(enabled)}
+        onRefresh={handleManualRefresh}
+        refreshing={refreshing}
+        onLogout={handleLogout}
+        onGoHome={() => setCurrentView('home')}
+      />
 
-          {/* Latest Stack Trace */}
-          <div style={{ marginBottom: '1.75rem' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-              Latest Stack Trace
-            </h3>
-            <pre
-              style={{
-                background: '#040711',
-                padding: '1rem',
-                borderRadius: '8px',
-                border: '1px solid var(--border)',
-                overflowX: 'auto',
-                fontSize: '0.825rem',
-                lineHeight: 1.5,
-                color: '#e2e8f0',
-              }}
-            >
-              {issueDetail.events[0]?.stack || 'No stack trace provided for this event.'}
-            </pre>
-          </div>
-
-          {/* Event Occurrences History */}
-          <div>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-              Recent Occurrences ({issueDetail.events.length})
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {issueDetail.events.map((evt) => (
-                <div
-                  key={evt.id}
-                  style={{
-                    background: 'var(--card)',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '6px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: '0.825rem',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <div>
-                    <span style={{ fontWeight: 600, marginRight: '0.5rem' }}>Event #{evt.id}</span>
-                    <span style={{ color: 'var(--text-muted)' }}>{evt.message}</span>
-                  </div>
-                  <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                    {formatDate(evt.timestamp || evt.received_at)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Issues List View */
-        <div>
-          {/* Controls: Filter Tabs & Search Bar */}
+      {/* Main Content Area */}
+      <main style={{ flex: 1, maxWidth: '1240px', width: '100%', margin: '0 auto', padding: '1.75rem 1.5rem' }}>
+        {projects.length === 0 ? (
+          /* Empty Projects State / First-Time Onboarding */
           <div
+            className="animate-fade-in-up"
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '1rem',
-              marginBottom: '1rem',
+              background: 'var(--bg-surface)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: 'var(--shadow-md)',
+              padding: '4rem 2rem',
+              textAlign: 'center',
+              maxWidth: '560px',
+              margin: '3rem auto',
             }}
           >
-            {/* Filter Tabs */}
-            <div style={{ display: 'flex', gap: '0.4rem', background: 'var(--panel)', padding: '0.25rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              {['ALL', 'UNRESOLVED', 'RESOLVED'].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  style={{
-                    padding: '0.4rem 0.85rem',
-                    borderRadius: '6px',
-                    fontSize: '0.825rem',
-                    fontWeight: 600,
-                    background: filterStatus === status ? 'var(--card)' : 'transparent',
-                    color: filterStatus === status ? 'var(--text)' : 'var(--text-dim)',
-                    border: filterStatus === status ? '1px solid var(--border-light)' : '1px solid transparent',
-                  }}
-                >
-                  {status}
-                </button>
-              ))}
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: 'var(--radius-xl)',
+                background: 'var(--primary-subtle)',
+                color: 'var(--primary)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '1.25rem',
+              }}
+            >
+              <IconBolt size={28} />
             </div>
-
-            {/* Search Input */}
-            <input
-              type="text"
-              placeholder="Search by error type or message..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: '280px' }}
-            />
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+              Welcome to Faultline
+            </h2>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '1.75rem' }}>
+              You don’t have any projects yet. Create your first project to get an API key and start tracking errors in real time.
+            </p>
+            <button
+              onClick={() => setShowProjectModal(true)}
+              className="btn-primary"
+              style={{ padding: '0.7rem 1.4rem', fontSize: '0.925rem' }}
+            >
+              <IconPlus size={16} />
+              <span>Create Your First Project</span>
+            </button>
           </div>
+        ) : (
+          <div>
+            {/* Project Stats Summary Cards */}
+            <StatsCards stats={stats} loading={loading} />
 
-          {/* Issues List Container */}
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
-            {loading ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading issues...
-              </div>
-            ) : filteredIssues.length === 0 ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <p style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>No issues found</p>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
-                  Trigger an error from the demo app to see it appear here in real-time.
-                </p>
-              </div>
+            {/* Either Single Issue Detail View or Issue List View */}
+            {selectedIssueId ? (
+              <IssueDetail
+                detail={issueDetail}
+                loading={detailLoading}
+                onBack={() => {
+                  setSelectedIssueId(null);
+                  setIssueDetail(null);
+                }}
+                onToggleStatus={handleToggleStatus}
+                onDeleteIssue={handleDeleteIssue}
+                onShowToast={showToast}
+              />
             ) : (
-              <div>
-                {filteredIssues.map((issue) => (
-                  <div
-                    key={issue.id}
-                    onClick={() => handleSelectIssue(issue.id)}
-                    style={{
-                      padding: '1rem 1.25rem',
-                      borderBottom: '1px solid var(--border)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      transition: 'background 0.15s ease-in-out',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--card-hover)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <div style={{ maxWidth: '75%' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                        <span style={typeBadgeStyle}>{issue.type}</span>
-                        <span
-                          style={{
-                            padding: '0.15rem 0.5rem',
-                            borderRadius: '4px',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            background: issue.status === 'RESOLVED' ? 'var(--success-bg)' : 'var(--danger-bg)',
-                            color: issue.status === 'RESOLVED' ? 'var(--success)' : 'var(--danger)',
-                          }}
-                        >
-                          {issue.status}
-                        </span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                          #{issue.id}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '0.925rem',
-                          fontWeight: 500,
-                          color: 'var(--text)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {issue.message}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--primary)' }}>
-                          {issue.events_count} {issue.events_count === 1 ? 'event' : 'events'}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                          {formatDate(issue.last_seen)}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={(e) => handleToggleStatus(e, issue.id, issue.status)}
-                        style={{
-                          padding: '0.35rem 0.75rem',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          background: issue.status === 'RESOLVED' ? 'var(--card)' : 'var(--success-bg)',
-                          color: issue.status === 'RESOLVED' ? 'var(--text-muted)' : 'var(--success)',
-                          border: `1px solid ${issue.status === 'RESOLVED' ? 'var(--border)' : 'rgba(16, 185, 129, 0.3)'}`,
-                        }}
-                      >
-                        {issue.status === 'RESOLVED' ? 'Reopen' : 'Resolve'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <IssuesList
+                issues={issues}
+                pagination={pagination}
+                filterStatus={filterStatus}
+                onFilterChange={(st) => {
+                  setFilterStatus(st);
+                  setPage(1);
+                }}
+                searchQuery={searchQuery}
+                onSearchChange={(q) => {
+                  setSearchQuery(q);
+                  setPage(1);
+                }}
+                onSelectIssue={handleSelectIssue}
+                onToggleStatus={handleToggleStatus}
+                onDeleteIssue={handleDeleteIssue}
+                loading={loading}
+                onPageChange={(p) => setPage(p)}
+                onOpenSdk={() => setShowSdkModal(true)}
+              />
             )}
           </div>
-        </div>
+        )}
+      </main>
+
+      {/* Modals */}
+      {showProjectModal && (
+        <ProjectModal
+          onClose={() => setShowProjectModal(false)}
+          projectCount={projects.length}
+          onProjectCreated={(newProj) => {
+            fetchProjects(newProj.id);
+          }}
+          onShowToast={showToast}
+        />
       )}
+
+      {showSettingsModal && activeProject && (
+        <ProjectSettingsModal
+          project={activeProject}
+          onClose={() => setShowSettingsModal(false)}
+          onProjectUpdated={(updated) => {
+            fetchProjects(updated.id);
+          }}
+          onProjectDeleted={(deletedId) => {
+            fetchProjects();
+          }}
+          onShowToast={showToast}
+        />
+      )}
+
+      {showSdkModal && (
+        <SdkSnippetModal
+          activeProject={activeProject}
+          onClose={() => setShowSdkModal(false)}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* Floating Toast Notification Container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
-
-const statCardStyle = {
-  background: 'var(--panel)',
-  border: '1px solid var(--border)',
-  borderRadius: '8px',
-  padding: '1rem',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.35rem',
-};
-
-const statLabelStyle = {
-  fontSize: '0.8rem',
-  color: 'var(--text-dim)',
-  fontWeight: 500,
-};
-
-const statValueStyle = {
-  fontSize: '1.65rem',
-  fontWeight: 700,
-  letterSpacing: '-0.02em',
-};
-
-const typeBadgeStyle = {
-  background: 'rgba(56, 189, 248, 0.12)',
-  color: 'var(--primary)',
-  padding: '0.2rem 0.55rem',
-  borderRadius: '4px',
-  fontSize: '0.75rem',
-  fontWeight: 600,
-  border: '1px solid rgba(56, 189, 248, 0.25)',
-};

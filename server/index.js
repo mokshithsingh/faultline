@@ -26,14 +26,8 @@ app.set('trust proxy', 1);
 app.use(cookieParser());
 app.use(express.json({ limit: '100kb' }));
 
-app.get('/health', async (req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    return res.status(200).json({ status: 'ok', database: 'connected' });
-  } catch (error) {
-    console.error('Health check database error:', error);
-    return res.status(500).json({ status: 'error', database: 'disconnected' });
-  }
+app.get('/health', (req, res) => {
+  return res.status(200).json({ ok: true });
 });
 
 // CORS open to any origin ONLY on /v1/ingest; /api routes are same-origin and need no CORS

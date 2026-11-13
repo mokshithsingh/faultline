@@ -6,9 +6,15 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      // Proxy API requests to Express server running on port 4000
-      '/issues': 'http://localhost:4000',
-      '/health': 'http://localhost:4000',
+      // Proxy backend API and health endpoints to Express server on port 4000
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
     },
   },
 });

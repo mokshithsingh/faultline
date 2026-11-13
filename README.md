@@ -20,7 +20,7 @@ cd server && npm start
 cd dashboard && npm run dev
 ```
 * **URL:** http://localhost:3000
-* React + Vite dark-mode dashboard showing aggregated statistics, issue lists, and stack traces.
+* React + Vite modern light-theme dashboard showing user auth, projects, aggregated statistics, issue lists, and stack traces.
 
 ---
 
