@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../clipboard';
 import { IconClose, IconKey, IconCopy, IconCheck, IconAlertCircle, IconBolt } from './Icons';
 import { api } from '../api';
 
@@ -32,9 +33,12 @@ export default function ProjectModal({ onClose, onProjectCreated, onShowToast, p
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!createdProject?.api_key) return;
-    navigator.clipboard.writeText(createdProject.api_key);
+    if (!(await copyText(createdProject.api_key))) {
+      onShowToast?.('Could not copy. Please select the key and copy it manually.', 'error');
+      return;
+    }
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
     onShowToast?.('API Key copied to clipboard!', 'success');

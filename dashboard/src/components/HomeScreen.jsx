@@ -7,7 +7,6 @@ import {
   IconZap,
   IconActivity,
   IconExternalLink,
-  IconGitHub,
   IconUser,
   IconLogOut,
 } from './Icons';

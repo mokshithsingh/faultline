@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { copyText } from '../clipboard';
 import { IconGemini, IconSparkles, IconCopy, IconCheck, IconRefresh, IconClose, IconTerminal } from './Icons';
 import { api } from '../api';
 
@@ -195,9 +196,12 @@ export default function GeminiExplainer({
     }
   }, [issue?.id, projectId]);
 
-  const handleCopyExplanation = () => {
+  const handleCopyExplanation = async () => {
     if (!explanationData?.explanation) return;
-    navigator.clipboard.writeText(explanationData.explanation);
+    if (!(await copyText(explanationData.explanation))) {
+      onShowToast?.('Could not copy. Please select the text and copy it manually.', 'error');
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     onShowToast?.('Gemini explanation copied to clipboard!', 'success');

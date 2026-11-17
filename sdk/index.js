@@ -1,16 +1,39 @@
+/**
+ * faultline-tracker: zero-dependency error reporting SDK for Faultline.
+ * Works in Node.js (18+, uses the built-in fetch) and in browsers.
+ */
+
 const config = {
-  endpoint: 'http://localhost:4000/v1/ingest',
+  // No default endpoint: it must come from init({ endpoint }), the FAULTLINE_ENDPOINT
+  // env var, window.FAULTLINE_ENDPOINT, or the script tag's data-endpoint attribute.
+  endpoint: null,
   apiKey: null,
   enabled: true,
   isInitialized: false,
+  warnedNoEndpoint: false,
 };
+
+// How long a crashing Node process waits for the error report to be sent before exiting
+const CRASH_FLUSH_TIMEOUT_MS = 2000;
 
 /**
  * Dispatches an error payload to the Faultline ingest endpoint.
  * Catches transport errors internally so reporting failures never crash the host app.
  */
 async function sendEvent(payload) {
-  if (!config.enabled || !config.endpoint) return;
+  if (!config.enabled) return;
+
+  if (!config.endpoint) {
+    // Warn only once, so a misconfigured app doesn't flood its own logs
+    if (!config.warnedNoEndpoint) {
+      config.warnedNoEndpoint = true;
+      console.warn(
+        'Faultline: no endpoint configured, so errors are NOT being reported. ' +
+        'Set FAULTLINE_ENDPOINT or call Faultline.init({ endpoint, apiKey }).'
+      );
+    }
+    return;
+  }
 
   try {
     if (typeof fetch === 'function') {
@@ -71,7 +94,30 @@ function captureMessage(message, context = {}) {
 }
 
 /**
+ * Node.js only: report a fatal error, then crash the process like Node normally would.
+ * Waits at most CRASH_FLUSH_TIMEOUT_MS for the report, so a slow network can't hang the app.
+ * If the app registered its own handler for this event, we only report and let the app decide.
+ */
+function reportFatalAndExit(error, eventName) {
+  const ownHandlerOnly = process.listenerCount(eventName) === 1;
+
+  const timeout = new Promise((resolve) => {
+    const timer = setTimeout(resolve, CRASH_FLUSH_TIMEOUT_MS);
+    if (timer.unref) timer.unref();
+  });
+
+  Promise.race([captureException(error), timeout]).finally(() => {
+    if (ownHandlerOnly) {
+      // Same visible behavior as an unhandled crash: print the error and exit with code 1
+      console.error(error);
+      process.exit(1);
+    }
+  });
+}
+
+/**
  * Initializes the SDK and attaches global handlers for uncaught errors and promise rejections.
+ * Calling init() again only updates the settings; handlers are attached once.
  */
 function init(options = {}) {
   if (options.endpoint) config.endpoint = options.endpoint;
@@ -95,26 +141,28 @@ function init(options = {}) {
         : new Error(String(reason || 'Unhandled Promise Rejection'));
       captureException(error);
     });
+    return;
   }
 
-  // Node.js environment: catch uncaught exceptions and unhandled promise rejections
+  // Node.js environment: catch uncaught exceptions and unhandled promise rejections,
+  // report them, then exit (instead of leaving the app running in a broken state)
   if (typeof process !== 'undefined' && typeof process.on === 'function') {
     process.on('uncaughtException', (err) => {
-      captureException(err);
+      reportFatalAndExit(err, 'uncaughtException');
     });
 
     process.on('unhandledRejection', (reason) => {
       const error = (reason instanceof Error)
         ? reason
         : new Error(String(reason || 'Unhandled Promise Rejection'));
-      captureException(error);
+      reportFatalAndExit(error, 'unhandledRejection');
     });
   }
 }
 
-// Auto-initialize in Node.js environment if environment variables are set
-if (typeof process !== 'undefined' && process.env) {
-  const envApiKey = process.env.FAULTLINE_API_KEY || process.env.INGEST_API_KEY || process.env.DB_INGEST_API_KEY;
+// Auto-initialize in Node.js if FAULTLINE_API_KEY is set (endpoint from FAULTLINE_ENDPOINT)
+if (typeof window === 'undefined' && typeof process !== 'undefined' && process.env) {
+  const envApiKey = process.env.FAULTLINE_API_KEY;
   const envEndpoint = process.env.FAULTLINE_ENDPOINT;
   if (envApiKey) {
     init({
@@ -124,7 +172,7 @@ if (typeof process !== 'undefined' && process.env) {
   }
 }
 
-// Auto-initialize in Browser environment if window configuration or script attributes are present
+// Auto-initialize in the browser from window globals or <script data-api-key data-endpoint>
 if (typeof window !== 'undefined') {
   const browserKey = window.FAULTLINE_API_KEY;
   const browserEndpoint = window.FAULTLINE_ENDPOINT;

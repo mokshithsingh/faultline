@@ -1,13 +1,36 @@
 {
   "name": "faultline-tracker",
-  "version": "1.0.0",
-  "description": "Plain JavaScript & Node.js SDK for Faultline error tracking",
+  "version": "0.1.0",
+  "description": "Zero-dependency JavaScript & Node.js SDK for the Faultline error tracker",
   "main": "index.js",
   "files": [
     "index.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "test": "node test.js"
+  },
+  "keywords": [
+    "error-tracking",
+    "error-reporting",
+    "exceptions",
+    "monitoring",
+    "faultline",
+    "sentry-alternative"
+  ],
+  "author": "Mokshith",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mokshithsingh/faultline.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://github.com/mokshithsingh/faultline/tree/main/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/mokshithsingh/faultline/issues"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

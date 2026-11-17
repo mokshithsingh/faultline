@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../clipboard';
 import { IconClose, IconSettings, IconKey, IconTrash, IconCheck, IconCopy, IconAlertCircle } from './Icons';
 import { api } from '../api';
 
@@ -63,9 +64,12 @@ export default function ProjectSettingsModal({ project, onClose, onProjectUpdate
     }
   };
 
-  const handleCopyNewKey = () => {
+  const handleCopyNewKey = async () => {
     if (!newKey) return;
-    navigator.clipboard.writeText(newKey);
+    if (!(await copyText(newKey))) {
+      onShowToast?.('Could not copy. Please select the key and copy it manually.', 'error');
+      return;
+    }
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
     onShowToast?.('New API Key copied to clipboard!', 'success');

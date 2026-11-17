@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../clipboard';
 import {
   IconArrowLeft,
   IconCheck,
@@ -53,16 +54,22 @@ export default function IssueDetail({
     });
   };
 
-  const copyFingerprint = () => {
-    navigator.clipboard.writeText(issue.fingerprint);
+  const copyFingerprint = async () => {
+    if (!(await copyText(issue.fingerprint))) {
+      onShowToast?.('Could not copy. Please select the text and copy it manually.', 'error');
+      return;
+    }
     setCopiedFingerprint(true);
     setTimeout(() => setCopiedFingerprint(false), 2000);
     onShowToast?.('Fingerprint copied to clipboard!', 'success');
   };
 
-  const copyStackTrace = () => {
+  const copyStackTrace = async () => {
     const stack = latestEvent?.stack || 'No stack trace available';
-    navigator.clipboard.writeText(stack);
+    if (!(await copyText(stack))) {
+      onShowToast?.('Could not copy. Please select the text and copy it manually.', 'error');
+      return;
+    }
     setCopiedStack(true);
     setTimeout(() => setCopiedStack(false), 2000);
     onShowToast?.('Stack trace copied to clipboard!', 'success');

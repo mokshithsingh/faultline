@@ -5,7 +5,6 @@ import {
   IconPlus,
   IconSettings,
   IconRefresh,
-  IconGitHub,
   IconLogOut,
   IconUser,
   IconTerminal,
@@ -217,9 +216,9 @@ export default function Navbar({
           )}
         </div>
 
-        {/* Right: SDK Download, Live Polling & User Menu */}
+        {/* Right: SDK Setup, Live Polling & User Menu */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          {/* Download SDK Button */}
+          {/* SDK Setup Button (opens npm install instructions) */}
           <button
             onClick={onOpenSdk}
             className="btn-secondary"
@@ -231,8 +230,8 @@ export default function Navbar({
               border: '1px solid var(--border-strong)',
             }}
           >
-            <IconGitHub size={16} />
-            <span>Download SDK</span>
+            <IconTerminal size={16} />
+            <span>SDK Setup</span>
           </button>
 
           {/* Live Polling Toggle Switch */}
