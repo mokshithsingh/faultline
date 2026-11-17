@@ -21,9 +21,9 @@ async function ingestEvent(req, res) {
     });
   }
 
-  if (typeof stack !== 'string' || stack.trim() === '') {
+  if (stack !== undefined && stack !== null && typeof stack !== 'string') {
     return res.status(400).json({
-      error: 'Field "stack" must be a non-empty string.',
+      error: 'Field "stack" must be a string.',
     });
   }
 
@@ -43,14 +43,19 @@ async function ingestEvent(req, res) {
 
   const eventType = type.trim().slice(0, 255);
   const eventMessage = message.trim();
-  const eventStack = stack.trim();
+  const eventStack = typeof stack === 'string' ? stack.trim() : '';
 
-  // Server alone computes the fingerprint
-  const issueFingerprint = generateFingerprint({
-    type: eventType,
-    message: eventMessage,
-    stack: eventStack,
-  });
+  // Use custom client fingerprint if provided; otherwise compute SHA-256 fingerprint
+  const customFingerprint = req.body?.fingerprint;
+  const issueFingerprint = (typeof customFingerprint === 'string' && customFingerprint.trim() !== '')
+    ? (customFingerprint.trim().length <= 64
+        ? customFingerprint.trim()
+        : generateFingerprint({ type: eventType, message: customFingerprint.trim(), stack: '' }))
+    : generateFingerprint({
+        type: eventType,
+        message: eventMessage,
+        stack: eventStack,
+      });
 
   // Exactly the same variable used for issue, event, and projects.last_event_at
   const projectId = req.projectId;

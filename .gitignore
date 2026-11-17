@@ -3,3 +3,5 @@ node_modules
 dist
 GEMINI.md
 progress.md
+# Machine-specific compose overrides (e.g. the VPS-only DB port mapping)
+docker-compose.override.yml

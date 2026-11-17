@@ -8,11 +8,15 @@ export default defineConfig({
     proxy: {
       // Proxy backend API and health endpoints to Express server on port 4000
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'http://127.0.0.1:4000',
+        changeOrigin: true,
+      },
+      '/v1': {
+        target: 'http://127.0.0.1:4000',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:4000',
+        target: 'http://127.0.0.1:4000',
         changeOrigin: true,
       },
     },

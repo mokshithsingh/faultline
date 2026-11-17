@@ -8,6 +8,7 @@ import {
   IconChevronRight,
   IconAlertCircle,
   IconTerminal,
+  IconGemini,
 } from './Icons';
 
 export default function IssuesList({
@@ -239,6 +240,23 @@ export default function IssuesList({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectIssue(issue.id, true);
+                      }}
+                      className="btn-gemini"
+                      style={{
+                        padding: '0.35rem 0.65rem',
+                        fontSize: '0.75rem',
+                      }}
+                      title="Explain error with Gemini AI"
+                    >
+                      <IconGemini size={13} />
+                      <span>Gemini</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={(e) => {

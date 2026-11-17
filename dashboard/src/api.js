@@ -135,4 +135,11 @@ export const api = {
       method: 'DELETE',
     });
   },
+
+  async explainProjectIssue(projectId, issueId, apiKey = null) {
+    return request(`/api/projects/${projectId}/issues/${issueId}/explain`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey }),
+    });
+  },
 };

@@ -1,5 +1,5 @@
 const config = {
-  endpoint: 'http://localhost:4000/ingest',
+  endpoint: 'http://localhost:4000/v1/ingest',
   apiKey: null,
   enabled: true,
   isInitialized: false,
@@ -109,6 +109,40 @@ function init(options = {}) {
         : new Error(String(reason || 'Unhandled Promise Rejection'));
       captureException(error);
     });
+  }
+}
+
+// Auto-initialize in Node.js environment if environment variables are set
+if (typeof process !== 'undefined' && process.env) {
+  const envApiKey = process.env.FAULTLINE_API_KEY || process.env.INGEST_API_KEY || process.env.DB_INGEST_API_KEY;
+  const envEndpoint = process.env.FAULTLINE_ENDPOINT;
+  if (envApiKey) {
+    init({
+      apiKey: envApiKey,
+      endpoint: envEndpoint || undefined,
+    });
+  }
+}
+
+// Auto-initialize in Browser environment if window configuration or script attributes are present
+if (typeof window !== 'undefined') {
+  const browserKey = window.FAULTLINE_API_KEY;
+  const browserEndpoint = window.FAULTLINE_ENDPOINT;
+  if (browserKey) {
+    init({
+      apiKey: browserKey,
+      endpoint: browserEndpoint || undefined,
+    });
+  } else if (typeof document !== 'undefined' && document.currentScript) {
+    const scriptTag = document.currentScript;
+    const tagKey = scriptTag.getAttribute('data-api-key');
+    const tagEndpoint = scriptTag.getAttribute('data-endpoint');
+    if (tagKey) {
+      init({
+        apiKey: tagKey,
+        endpoint: tagEndpoint || undefined,
+      });
+    }
   }
 }
 

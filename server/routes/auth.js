@@ -5,17 +5,25 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Rate limiter for register and login: 10 attempts per 15 minutes per IP
-const authLimiter = rateLimit({
+// Rate limiters for register and login: 10 attempts per 15 minutes per IP
+const registerLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many attempts, please try again later.' },
+  message: { error: 'Too many registration attempts, please try again later.' },
 });
 
-router.post('/register', authLimiter, register);
-router.post('/login', authLimiter, login);
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later.' },
+});
+
+router.post('/register', registerLimiter, register);
+router.post('/login', loginLimiter, login);
 router.post('/logout', logout);
 router.get('/me', requireAuth, getMe);
 

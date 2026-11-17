@@ -239,3 +239,35 @@ export function IconActivity({ size = 16, color = 'currentColor', ...props }) {
     </svg>
   );
 }
+
+export function IconGemini({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M12 2C12 7.52285 7.52285 12 2 12C7.52285 12 12 16.4771 12 22C12 16.4771 16.4771 12 22 12C16.4771 12 12 7.52285 12 2Z"
+        fill="url(#gemini-gradient)"
+      />
+      <path
+        d="M19 2C19 4.20914 17.2091 6 15 6C17.2091 6 19 7.79086 19 10C19 7.79086 20.7909 6 23 6C20.7909 6 19 4.20914 19 2Z"
+        fill="url(#gemini-gradient)"
+        fillOpacity="0.85"
+      />
+      <defs>
+        <linearGradient id="gemini-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#4f46e5" />
+          <stop offset="0.5" stopColor="#9333ea" />
+          <stop offset="1" stopColor="#38bdf8" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+export function IconSparkles({ size = 16, color = 'currentColor', ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 3L14.5 8.5L20 11L14.5 13.5L12 19L9.5 13.5L4 11L9.5 8.5L12 3Z" />
+      <path d="M19 16L20 18.5L22.5 19.5L20 20.5L19 23L18 20.5L15.5 19.5L18 18.5L19 16Z" />
+    </svg>
+  );
+}

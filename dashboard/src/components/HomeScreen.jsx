@@ -64,7 +64,7 @@ export default function HomeScreen({
           </div>
 
           {/* Navigation Links */}
-          <nav style={{ display: 'none', md: 'flex', alignItems: 'center', gap: '1.75rem' }}>
+          <nav style={{ display: 'flex', alignItems: 'center', gap: '1.75rem' }}>
             <a href="#features" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none' }}>
               Features
             </a>

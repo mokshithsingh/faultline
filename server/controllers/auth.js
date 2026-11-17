@@ -6,18 +6,20 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TOKEN_COOKIE_NAME = 'token';
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-function getCookieOptions() {
+function getCookieOptions(req) {
+  // Mark secure only if request was served over HTTPS (prevents cookie dropping over raw HTTP/IP access)
+  const isHttps = req ? (req.secure || req.headers?.['x-forwarded-proto'] === 'https') : false;
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isHttps,
     maxAge: SEVEN_DAYS_MS,
   };
 }
 
-function setAuthCookie(res, userId) {
+function setAuthCookie(req, res, userId) {
   const token = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
-  res.cookie(TOKEN_COOKIE_NAME, token, getCookieOptions());
+  res.cookie(TOKEN_COOKIE_NAME, token, getCookieOptions(req));
 }
 
 /**
@@ -50,7 +52,7 @@ async function register(req, res) {
     const user = result.rows[0];
 
     // Log the user in on success via httpOnly cookie
-    setAuthCookie(res, user.id);
+    setAuthCookie(req, res, user.id);
 
     return res.status(201).json({
       user: {
@@ -100,7 +102,7 @@ async function login(req, res) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    setAuthCookie(res, user.id);
+    setAuthCookie(req, res, user.id);
 
     return res.status(200).json({
       user: {
@@ -119,10 +121,11 @@ async function login(req, res) {
  * Log out user by clearing the auth cookie.
  */
 function logout(req, res) {
+  const isHttps = req ? (req.secure || req.headers?.['x-forwarded-proto'] === 'https') : false;
   res.clearCookie(TOKEN_COOKIE_NAME, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isHttps,
   });
   return res.status(200).json({ success: true, message: 'Logged out successfully' });
 }

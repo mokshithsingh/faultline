@@ -195,7 +195,7 @@
       </div>
       <div class="badge">
         <span class="status-dot"></span>
-        Target: <span style="font-family: var(--font-mono)">http://localhost:4000/v1/ingest</span>
+        Target: <span id="targetEndpoint" style="font-family: var(--font-mono)">http://localhost:4000/v1/ingest</span>
       </div>
     </header>
 
@@ -256,16 +256,16 @@
     </div>
   </div>
 
-  <!-- Load Configuration & Faultline SDK -->
+  <!-- Load Configuration & Faultline SDK (Auto-initializes via window.FAULTLINE_* from /config.js) -->
   <script src="/config.js"></script>
   <script src="/sdk.js"></script>
 
   <script>
-    // Initialize the Faultline SDK with the endpoint and authentication key
-    Faultline.init({
-      endpoint: 'http://localhost:4000/v1/ingest',
-      apiKey: window.FAULTLINE_API_KEY,
-    });
+    // Dynamically update target badge from environment config
+    const targetEl = document.getElementById('targetEndpoint');
+    if (targetEl && window.FAULTLINE_ENDPOINT) {
+      targetEl.textContent = window.FAULTLINE_ENDPOINT;
+    }
 
     function log(message, isSuccess = false) {
       const output = document.getElementById('logOutput');
@@ -284,6 +284,14 @@
     function clearLogs() {
       document.getElementById('logOutput').innerText = 'Waiting for events... Click any button above to trigger an error.';
     }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!window.FAULTLINE_API_KEY) {
+        log('⚠️ Warning: No FAULTLINE_API_KEY found in .env. Ingest events will return 401 Unauthorized.');
+      } else {
+        log('Faultline SDK auto-initialized with endpoint: ' + (window.FAULTLINE_ENDPOINT || 'default'), true);
+      }
+    });
 
     // 1. Uncaught error
     function triggerUncaughtError() {

@@ -8,7 +8,9 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconTerminal,
+  IconGemini,
 } from './Icons';
+import GeminiExplainer from './GeminiExplainer';
 
 export default function IssueDetail({
   detail,
@@ -17,10 +19,13 @@ export default function IssueDetail({
   onToggleStatus,
   onDeleteIssue,
   onShowToast,
+  activeProject,
+  initialExplain = false,
 }) {
   const [copiedFingerprint, setCopiedFingerprint] = useState(false);
   const [copiedStack, setCopiedStack] = useState(false);
   const [expandedEventId, setExpandedEventId] = useState(null);
+  const [showGemini, setShowGemini] = useState(initialExplain);
 
   if (loading || !detail || !detail.issue) {
     return (
@@ -91,6 +96,16 @@ export default function IssueDetail({
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={() => setShowGemini((prev) => !prev)}
+            className="btn-gemini"
+            title="Explain exactly where the error occurred and how to fix it with Google Gemini"
+          >
+            <IconGemini size={15} />
+            <span>Explain with Gemini</span>
+          </button>
+
           <button
             type="button"
             onClick={() => onToggleStatus(issue.id, issue.status)}
@@ -234,6 +249,17 @@ export default function IssueDetail({
         </div>
       </div>
 
+      {/* Gemini AI Error Analysis Section */}
+      {showGemini && (
+        <GeminiExplainer
+          issue={issue}
+          latestEvent={latestEvent}
+          projectId={issue.project_id || activeProject?.id}
+          onShowToast={onShowToast}
+          onClose={() => setShowGemini(false)}
+        />
+      )}
+
       {/* Latest Stack Trace Card */}
       <div
         style={{
@@ -260,15 +286,29 @@ export default function IssueDetail({
               Latest Stack Trace
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={copyStackTrace}
-            className="btn-secondary"
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.775rem' }}
-          >
-            {copiedStack ? <IconCheck size={14} color="var(--success)" /> : <IconCopy size={14} />}
-            <span>{copiedStack ? 'Copied' : 'Copy Stack'}</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            {!showGemini && (
+              <button
+                type="button"
+                onClick={() => setShowGemini(true)}
+                className="btn-gemini"
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.775rem' }}
+                title="Explain error location with Gemini"
+              >
+                <IconGemini size={14} />
+                <span>Explain with Gemini</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={copyStackTrace}
+              className="btn-secondary"
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.775rem' }}
+            >
+              {copiedStack ? <IconCheck size={14} color="var(--success)" /> : <IconCopy size={14} />}
+              <span>{copiedStack ? 'Copied' : 'Copy Stack'}</span>
+            </button>
+          </div>
         </div>
 
         <pre

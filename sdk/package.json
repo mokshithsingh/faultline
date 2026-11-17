@@ -1,8 +1,12 @@
 {
-  "name": "faultline-sdk",
+  "name": "faultline-tracker",
   "version": "1.0.0",
-  "description": "Plain JavaScript SDK for Faultline error tracking",
+  "description": "Plain JavaScript & Node.js SDK for Faultline error tracking",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md"
+  ],
   "scripts": {
     "test": "node test.js"
   }

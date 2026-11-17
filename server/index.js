@@ -30,8 +30,13 @@ app.get('/health', (req, res) => {
   return res.status(200).json({ ok: true });
 });
 
-// CORS open to any origin ONLY on /v1/ingest; /api routes are same-origin and need no CORS
-app.use('/v1/ingest', cors(), ingestRouter);
+// Ingest routes: CORS is open to ANY website here, because apps using the SDK
+// run on their own domains. No cookies are involved (auth is the x-api-key header).
+app.use(['/v1/ingest', '/ingest'], cors(), ingestRouter);
+
+// /api routes get NO CORS headers on purpose: the dashboard is served from the
+// same origin (nginx in production, the Vite proxy in development), so other
+// websites cannot make logged-in requests with the user's cookie.
 
 // Project and auth routes
 app.use('/api/auth', authRouter);

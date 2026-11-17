@@ -36,6 +36,7 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [selectedIssueId, setSelectedIssueId] = useState(null);
   const [issueDetail, setIssueDetail] = useState(null);
+  const [autoExplainIssue, setAutoExplainIssue] = useState(false);
 
   // Loading & Polling State
   const [loading, setLoading] = useState(false);
@@ -175,8 +176,9 @@ export default function App() {
   }, [activeProject, showToast]);
 
   // Handle clicking on an issue
-  const handleSelectIssue = (id) => {
+  const handleSelectIssue = (id, autoExplain = false) => {
     setSelectedIssueId(id);
+    setAutoExplainIssue(autoExplain);
     fetchIssueDetail(id);
   };
 
@@ -412,9 +414,12 @@ export default function App() {
               <IssueDetail
                 detail={issueDetail}
                 loading={detailLoading}
+                activeProject={activeProject}
+                initialExplain={autoExplainIssue}
                 onBack={() => {
                   setSelectedIssueId(null);
                   setIssueDetail(null);
+                  setAutoExplainIssue(false);
                 }}
                 onToggleStatus={handleToggleStatus}
                 onDeleteIssue={handleDeleteIssue}

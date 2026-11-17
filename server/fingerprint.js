@@ -62,8 +62,8 @@ function parseFrames(stack) {
       const fn = trimmed.slice(0, atIndex).trim();
       const rawLoc = trimmed.slice(atIndex + 1).trim();
 
-      const isHeader = fn.includes(':') || /^\w+Error/i.test(fn);
-      const hasLineNumber = /:\d+(?::\d+)?\)?$/.test(rawLoc.replace(/[?#].*$/, ''));
+      const isHeader = fn.includes(':');
+      const hasLineNumber = /:\d+(?::\d+)?\)?$/.test(rawLoc);
 
       if (!isHeader && hasLineNumber) {
         frames.push(`${fn || '<anonymous>'}@${cleanLocation(rawLoc)}`);
