@@ -62,13 +62,6 @@ export default function HomeScreen({
             </span>
           </div>
 
-          {/* Navigation Links */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '1.75rem' }}>
-            <a href="#features" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none' }}>
-              Features
-            </a>
-          </nav>
-
           {/* User / Action CTA */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             {user ? (
