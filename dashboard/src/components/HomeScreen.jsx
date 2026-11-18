@@ -67,10 +67,6 @@ export default function HomeScreen({
             <a href="#features" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none' }}>
               Features
             </a>
-            <a href="http://localhost:5000" target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <span>Live Demo App</span>
-              <IconExternalLink size={14} />
-            </a>
           </nav>
 
           {/* User / Action CTA */}
@@ -237,13 +233,13 @@ export default function HomeScreen({
             )}
 
             <a
-              href="http://localhost:5000"
+              href="https://www.npmjs.com/package/faultline-tracker"
               target="_blank"
               rel="noopener noreferrer"
               className="btn-secondary"
               style={{ padding: '0.8rem 1.4rem', fontSize: '1rem', fontWeight: 600, gap: '0.5rem', textDecoration: 'none' }}
             >
-              <span>Interactive Demo App</span>
+              <span>faultline-tracker on npm</span>
               <IconExternalLink size={16} />
             </a>
           </div>
@@ -431,7 +427,7 @@ export default function HomeScreen({
             Ready to track errors in real time?
           </h2>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '1.75rem' }}>
-            Jump into the dashboard or launch the live test sandbox.
+            Jump into the dashboard or install the SDK from npm.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             {user ? (
@@ -452,13 +448,13 @@ export default function HomeScreen({
               </button>
             )}
             <a
-              href="http://localhost:5000"
+              href="https://www.npmjs.com/package/faultline-tracker"
               target="_blank"
               rel="noopener noreferrer"
               className="btn-secondary"
               style={{ padding: '0.75rem 1.4rem', fontSize: '0.95rem', fontWeight: 600, textDecoration: 'none' }}
             >
-              Open Demo App
+              View SDK on npm
             </a>
           </div>
         </div>
